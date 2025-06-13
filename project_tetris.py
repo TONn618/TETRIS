@@ -9,74 +9,103 @@ import random as rd
 class Tetromino:
     TETRO_TYPES = ['S', 'Z', 'L', 'J', 'I', 'O', 'T']
     WEIGHTS    = [0.08, 0.08, 0.15, 0.15, 0.14, 0.2, 0.2]
-    anchor_point = (0, 4)    #테트로미노 형성 지점의 units 인덱스, 
     SHAPES = {                                 #각 테트로미노의 anchor_point
-        'S' : [ (0, 0), (0, 1), (1, -1) (1, 0)]     #첫 줄 첫 블럭
-        'Z' : [ (0, -1), (0, 0), (1, 0), (1, 1) ]   #첫 줄 마지막 블럭
-        'L' : [ (0, 0), (1, 0), (2, 0), (2, 1) ]    #최상단 블럭
-        'J' : [ (0, 0), (1, 0), (2, -1), (2, 0) ]   #최상단 블럭
-        'I' : [ (0, 0), (1, 0), (2, 0), (3, 0) ]    #최상단 블럭
-        'O' : [ (0, 0), (1, 0), (0, 1), (1, 1) ]   #좌측 상단 블럭
-        'T' : [ (0, -1), (0, 0), (0, 1), (1, 0) ] } #첫 줄 중앙 블럭
+        'S' : np.array([ [0, 0], [0, 1], [1, -1], [1, 0]]),     #첫 줄 첫 블럭
+        'Z' : np.array([ [0, -1], [0, 0], [1, 0], [1, 1] ]),   #첫 줄 마지막 블럭
+        'L' : np.array([ [0, 0], [1, 0], [2, 0], [2, 1] ]),    #최상단 블럭
+        'J' : np.array([ [0, 0], [1, 0], [2, -1], [2, 0] ]),   #최상단 블럭
+        'I' : np.array([ [0, 0], [1, 0], [2, 0], [3, 0] ]),    #최상단 블럭
+        'O' : np.array([ [0, 0], [1, 0], [0, 1], [1, 1] ]),   #좌측 상단 블럭
+        'T' : np.array([ [0, -1], [0, 0], [0, 1], [1, 0] ]) } #첫 줄 중앙 블럭
 
-    
-    def __init__(self, chosen_type):
-        self.coords = Tetromino.SHAPES[chosen_type]
-        
-        
 
-    def choose_type(self):
-        chosen_type = rd.choices(tetro_types, weights, 1)
-        return chosen_type
+    def __init__(self):
+        self.tetro_type = self.choose_type()
+        self.offsets = Tetromino.SHAPES[self.tetro_type]
+        self.anchor_point = np.array([0, 4])    #테트로미노 형성 지점의 units 인덱스, 
+
+        for y, x in self.offsets + self.anchor_point:
+            BlockUnit.units[y][x].display_type = self.tetro_type
+        
+        self._previous_absolute_coords = self.offsets + self.anchor_point
+
+
+    @classmethod
+    def choose_type(cls):
+        chosen_type = rd.choices(cls.TETRO_TYPES, cls.WEIGHTS, k=1)
+        return chosen_type[0]
 
 
     def drag_down_tetro(self):
-        pass
+        self.anchor_point += [1, 0]
+        #테트로미노를 아래로 한 칸 이동
 
 
+    def check_colision(self):
+        for y, x in self._previous_absolute_coords:
+            print(y)
+            if  y >= 17:
+                return True
+            elif BlockUnit.units[y+1][x].filled:
+                return True
+            else: return False
 
 
+    def fix_tetromino(self):
+        for y, x in self.offsets + self.anchor_point:
+            BlockUnit.units[y][x].filled = True
+        self = None
+
+
+    def update_display_state(self):
+        for y, x in self._previous_absolute_coords:
+            BlockUnit.units[y][x].display_type = 'B'
+
+        self._previous_absolute_coords = self.offsets + self.anchor_point
+        for y, x in self._previous_absolute_coords:
+            BlockUnit.units[y][x].display_type = self.tetro_type
 
 
 
 class BlockUnit:
     TYPE_IMAGES = { tetro_type : pyg.transform.scale( pyg.image.load(f'Block_images/{tetro_type}.png') , (30, 30))
                     for tetro_type in Tetromino.TETRO_TYPES}
-    black_background_image = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30))
+    TYPE_IMAGES['B'] = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30)) #B means a black background tile
 ##    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
-    coords = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
+    PIXEL_POSITIONS = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
     units = [] #all BlockUnit instances are in this list, and this is 2d list, made at func-genegrate_map
 
 
-    def __init__(self, coord):
-        self.coord = coord
+    def __init__(self, pixel_position):
+        self.pixel_position = pixel_position
+        self.display_type = 'B'
         self.filled = False
+
 
 
     @classmethod
     def generate_map(cls):
         ScreenManager.screen.fill((0, 0, 0))
         row_units = []
-        for coord in cls.coords:
+
+        for position in cls.PIXEL_POSITIONS:
+            ScreenManager.screen.blit(cls.TYPE_IMAGES['B'], position)
+            row_units.append( cls(position) )
+
             if len(row_units) == 10:
                 cls.units.append(row_units)
                 row_units = []
-            ScreenManager.screen.blit(cls.black_background_image, coord)
-            row_units.append( cls(coord) )
         pyg.display.flip()
-
-
-    def blit_unit(self):
-        pass
-
-
-
-
-
 class ScreenManager:
     screen = pyg.display.set_mode((300, 540))
 
 
+    @classmethod
+    def reset_screen(cls):
+        cls.screen.fill((0, 0, 0))
+        for row in BlockUnit.units:
+            for unit in row:
+                cls.screen.blit(BlockUnit.TYPE_IMAGES[unit.display_type], unit.pixel_position)
 
 
 
@@ -86,12 +115,59 @@ class ScreenManager:
 pyg.init()
 pyg.display.set_caption("TETRIS")
 BlockUnit.generate_map()
+current_tetro = Tetromino()
+change_happened = False
+
+clock = pyg.time.Clock()
 fall_speed = 500#(ms)
-Tetromino.choose_type()
-while True:
-    break
+drop_interval = 0.8 #seconds
+drop_timer = 0.0
+
+running = True
+while running:
+    for event in pyg.event.get():
+        if event.type == pyg.QUIT:
+            running = False
+            pyg.quit()
+            sys.exit()
+
+        elif event.type == pyg.KEYDOWN:
+                if event.key == pyg.K_a:         #left movement
+                    current_tetro.anchor_point -= [0, 1]
+                    change_happened = True
+
+                if event.key == pyg.K_s:         #down movement
+                    current_tetro.anchor_point += [1, 0]
+                    change_happened = True
+                    drop_timer = 0.0
+
+                if event.key == pyg.K_d:         #right movement
+                    current_tetro.anchor_point += [0, 1]
+                    change_happened = True
+
+                if event.key == pyg.K_RETURN: #promptly drop tetromino
+                    while current_tetro.check_colision():
+                        current_tetro.drag_down_tetro()
+                    change_happened = True           #incompleted
+                    drop_timer = 0.0
+
+                if event.key == pyg.K_KP5:
+                    pass                               #rotate tetromino clockwise
+                    change_happened = True
+                if change_happened:
+                    change_happened = False
+                    current_tetro.update_display_state()
+
+    drop_timer += (clock.tick(60) / 1000)
+    if drop_interval - drop_timer <= 0:
+        current_tetro.drag_down_tetro()
+        current_tetro.update_display_state()
+        drop_timer = 0.0
+
+        if current_tetro.check_colision():
+            current_tetro.fix_tetromino()              #del tetro instance and fix it to gameboard
+            current_tetro = Tetromino()  #new tetromino
 
 
-
-    
-
+    ScreenManager.reset_screen()
+    pyg.display.flip()
