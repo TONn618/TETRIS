@@ -41,21 +41,27 @@ class Tetromino:
         #테트로미노를 아래로 한 칸 이동
 
 
-    def check_colision(self):
+    def check_floor_collision(self):
         for y, x in self._previous_absolute_coords:
-            print(y)
             if  y >= 17:
                 return True
             elif BlockUnit.units[y+1][x].filled:
                 return True
-            else: return False
 
 
-    def fix_tetromino(self):
-        for y, x in self.offsets + self.anchor_point:
+    def check_side_collision(self):
+        for y, x in self._previous_absolute_coords:
+            if x >= 9 or BlockUnit.units[y][x+1].filled:
+                return 'left'
+            elif x <= 0 or BlockUnit.units[y][x-1].filled:
+                return 'right'
+
+
+    def fix_to_board(self):
+        for y, x in self._previous_absolute_coords:
             BlockUnit.units[y][x].filled = True
         self = None
-
+        
 
     def update_display_state(self):
         for y, x in self._previous_absolute_coords:
@@ -64,6 +70,18 @@ class Tetromino:
         self._previous_absolute_coords = self.offsets + self.anchor_point
         for y, x in self._previous_absolute_coords:
             BlockUnit.units[y][x].display_type = self.tetro_type
+
+
+##    def handle_block_drop(self):
+##        if self.check_floor_collision():      #renew tetro  (del old one and create new one)
+##            self.fix_tetromino()              #fix tetro image on gameboard
+##            self.renew_tetro()
+##
+##    @staticmethod
+##    def renew_tetro():
+##        global current_tetro
+##        current_tetro = None
+##        current_tetro = Tetromino()
 
 
 
@@ -117,6 +135,7 @@ pyg.display.set_caption("TETRIS")
 BlockUnit.generate_map()
 current_tetro = Tetromino()
 change_happened = False
+harddropped = False
 
 clock = pyg.time.Clock()
 fall_speed = 500#(ms)
@@ -125,49 +144,60 @@ drop_timer = 0.0
 
 running = True
 while running:
+
+    drop_timer += (clock.tick(60) / 1000)
+    if drop_interval - drop_timer <= 0:
+        current_tetro.drag_down_tetro()
+        change_happened = True
+        drop_timer = 0.0
+
+
     for event in pyg.event.get():
         if event.type == pyg.QUIT:
             running = False
             pyg.quit()
             sys.exit()
 
+
         elif event.type == pyg.KEYDOWN:
                 if event.key == pyg.K_a:         #left movement
+                    if current_tetro.check_side_collision() == 'left':
+                        print(1)
+                        continue
                     current_tetro.anchor_point -= [0, 1]
                     change_happened = True
 
-                if event.key == pyg.K_s:         #down movement
+                elif event.key == pyg.K_s:         #down movement
                     current_tetro.anchor_point += [1, 0]
                     change_happened = True
                     drop_timer = 0.0
 
-                if event.key == pyg.K_d:         #right movement
+                elif event.key == pyg.K_d:         #right movement
+                    if current_tetro.check_side_collision() == 'right':
+                        print(2)
+                        continue
                     current_tetro.anchor_point += [0, 1]
                     change_happened = True
 
-                if event.key == pyg.K_RETURN: #promptly drop tetromino
-                    while current_tetro.check_colision():
+                elif event.key == pyg.K_RETURN: #promptly drop tetromino
+                    while not current_tetro.check_floor_collision():
                         current_tetro.drag_down_tetro()
-                    change_happened = True           #incompleted
+                        current_tetro.update_display_state()
+                    harddropped = True
                     drop_timer = 0.0
 
-                if event.key == pyg.K_KP5:
+                elif event.key == pyg.K_KP5:
                     pass                               #rotate tetromino clockwise
                     change_happened = True
-                if change_happened:
-                    change_happened = False
-                    current_tetro.update_display_state()
 
-    drop_timer += (clock.tick(60) / 1000)
-    if drop_interval - drop_timer <= 0:
-        current_tetro.drag_down_tetro()
+    if current_tetro.check_floor_collision() or harddropped:
+        harddropped = False
+        current_tetro.fix_to_board()
+        current_tetro = Tetromino()
+ 
+    if change_happened:
+        change_happened = False
         current_tetro.update_display_state()
-        drop_timer = 0.0
-
-        if current_tetro.check_colision():
-            current_tetro.fix_tetromino()              #del tetro instance and fix it to gameboard
-            current_tetro = Tetromino()  #new tetromino
-
 
     ScreenManager.reset_screen()
     pyg.display.flip()
