@@ -87,7 +87,6 @@ class Tetromino:
                     multiply_rows_by_matrix(shape, np.linalg.matrix_power(cls.ROTATION_MATRIX[2], i)) for i in range(1, 4)] )
         
         cls.ROTATION_SHAPES = dict(zip(cls.TETRO_TYPES, cls.ROTATION_SHAPES))
-        print(cls.ROTATION_SHAPES)
 
 
     @classmethod
@@ -98,6 +97,7 @@ class Tetromino:
 
     def drag_down_tetro(self):
         self.anchor_point += [1, 0]
+        print(1)
         #테트로미노를 아래로 한 칸 이동
 
 
@@ -132,6 +132,8 @@ class Tetromino:
 
 
     def rotate_clockwise(self):
+        if self.tetro_type == 'O':
+            return
         self.rotated += 1
         index = self.rotated % self.rotation_cycle
         if index == 0:
@@ -236,11 +238,13 @@ clock = pyg.time.Clock()
 fall_speed = 500#(ms)
 drop_interval = 0.8 #seconds
 drop_timer = 0.0
+fix_timer = 0.0
 
 running = True
 while running:
 
-    drop_timer += (clock.tick(60) / 1000)
+    dt = clock.tick(60) / 1000
+    drop_timer += dt
     if drop_interval - drop_timer <= 0:
         current_tetro.drag_down_tetro()
         change_happened = True
@@ -270,7 +274,7 @@ while running:
                         current_tetro.anchor_point += [0, 1]
                         change_happened = True
 
-                elif event.key == pyg.K_RETURN: #promptly drop tetromino
+                elif event.key == pyg.K_KP5: #promptly drop tetromino
                     while not current_tetro.check_floor_collision():
                         current_tetro.drag_down_tetro()
                         current_tetro.update_display_state()
@@ -281,12 +285,26 @@ while running:
                     current_tetro.rotate_clockwise() #rotate tetromino clockwise
                     change_happened = True
 
-    if current_tetro.check_floor_collision() or harddropped:
-        harddropped = False
+    if harddropped:
         current_tetro.fix_to_board()
-        current_tetro = None
         GB.check_full_row()
+        harddropped = False
+        current_tetro = None
         current_tetro = Tetromino(GB.units)
+
+    if current_tetro.check_floor_collision():
+        if fix_timer >= 1:
+            current_tetro.fix_to_board()
+            GB.check_full_row()
+            current_tetro = None
+            current_tetro = Tetromino(GB.units)
+            fix_timer = 0.0
+        else:
+            fix_timer += dt
+        drop_timer = 0.0
+    else:
+        fix_timer = 0.0
+        
  
     if change_happened:
         change_happened = False
