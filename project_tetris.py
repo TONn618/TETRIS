@@ -8,7 +8,7 @@ import random as rd
 #rotation kick 구현 필요
 #현재 벽차기에 대한 아이디어 무
 #anchor_point, check_collision 적극 활용 권장
-#check side/floor collision 을 one function merging 권장
+#check side/floor collision 을 one function 으로 merging 권장
 
 def rotate_point(point, rotation_matrix):
     y, x = point
