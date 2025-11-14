@@ -5,10 +5,12 @@ import math as m
 import time as t
 import sys
 import random as rd
+import copy
 #rotation kick 구현 필요
-#현재 벽차기에 대한 아이디어 무
+#회전 충돌 검사를 정형화할 필요성 큼
+#현재 벽차기에 대한 아이디어 존재
 #anchor_point, check_collision 적극 활용 권장
-#check side/floor collision 을 one function 으로 merging 권장
+#check side/floor collision 을 one function merging 중
 
 def rotate_point(point, rotation_matrix):
     y, x = point
@@ -101,7 +103,7 @@ class Tetromino:
         #테트로미노를 아래로 한 칸 이동
 
 
-    def check_floor_collision(self):
+    def is_floor_collision(self):
         for y, x in self.present_absolute_coords:
             if  y >= 17:
                 return True
@@ -109,12 +111,21 @@ class Tetromino:
                 return True
 
 
-    def check_side_collision(self):
+    def is_valid_unit(self, dy = 0, dx = 0):
         for y, x in self.present_absolute_coords:
-            if x == 0 or self.units[y][x-1].filled:
-                return 'left'
-            elif x == 9 or self.units[y][x+1].filled:
-                return 'right'
+            if x + dx < 0 or x + dx > 9:
+                return False
+            elif self.units[y + dy][x + dx].filled:
+                return False
+        return True
+    
+
+    def can_side_move(self, dx):
+        return self.is_valid_unit(dx)
+
+    
+    def can_rotation(self):
+        return self.is_valid_unit()
 
 
     def fix_to_board(self):
@@ -131,23 +142,38 @@ class Tetromino:
             self.units[y][x].display_type = self.tetro_type
 
 
-    def rotate_clockwise(self):
+    def try_rotate_clockwise(self):
+        dummy = copy.deepcopy(self)
         if self.tetro_type == 'O':
             return
-        self.rotated += 1
-        index = self.rotated % self.rotation_cycle
+        dummy.rotated += 1
+        index = dummy.rotated % dummy.rotation_cycle
         if index == 0:
-            self.offsets = self.moving_offsets
-            self.rotated = 0
-        else: self.offsets = self.rotation_offsets[index]
+            dummy.offsets = dummy.moving_offsets
+            dummy.rotated = 0
+        else: dummy.offsets = dummy.rotation_offsets[index]
+        dummy.present_absolute_coords = dummy.offsets + dummy.anchor_point
 
-    
+        if not dummy.can_rotation():
+            dummy.try_SRS_KICK()
+        
+        else:
+            self.rotated = dummy.rotated
+            self.offsets = dummy.offsets
+            self.present_absolute_coords = dummy.present_absolute_coords
+
+
+    def try_SRS_KICK(self, GameBoard):
+        for dy, dx in GameBoard.SRS_KICK_DATA:
+            if self.is_valid_unit(dy, dx):
+
 
 
 
 
 class GameBoard:
     PIXEL_POSITIONS = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
+    SRS_KICK_DATA = np.array([[0, 1], [0, -1], [1, 0], [1, 1], [1, -1]])
     
     
     def __init__(self):
@@ -179,7 +205,7 @@ class GameBoard:
             unit.display_type = 'B'              #추후 점수 계산 기능 추가 필요
             unit.filled = False
 
-    
+
     def drag_down_grid(self, row_index):
         self.units.pop(row_index)
         for row_units in self.units[:row_index]:
@@ -223,7 +249,7 @@ class ScreenManager:
 
 
 
-    
+
 
 pyg.init()
 pyg.display.set_caption("TETRIS")
@@ -260,29 +286,32 @@ while running:
 
         elif event.type == pyg.KEYDOWN:
                 if event.key == pyg.K_a:         #left movement
-                    if not current_tetro.check_side_collision() == 'left':
+                    if current_tetro.can_side_move(-1):
                         current_tetro.anchor_point -= [0, 1]
                         change_happened = True
 
                 elif event.key == pyg.K_s:         #down movement
-                    current_tetro.anchor_point += [1, 0]
-                    change_happened = True
-                    drop_timer = 0.0
+                    if current_tetro.is_floor_collision():
+                        pass
+                    else:
+                        current_tetro.anchor_point += [1, 0]
+                        change_happened = True
+                        drop_timer = 0.0
 
                 elif event.key == pyg.K_d:         #right movement
-                    if not current_tetro.check_side_collision() == 'right':
+                    if current_tetro.can_side_move(1):
                         current_tetro.anchor_point += [0, 1]
                         change_happened = True
 
                 elif event.key == pyg.K_KP5: #promptly drop tetromino
-                    while not current_tetro.check_floor_collision():
+                    while not current_tetro.is_floor_collision():
                         current_tetro.drag_down_tetro()
                         current_tetro.update_display_state()
                     harddropped = True
                     drop_timer = 0.0
 
                 elif event.key == pyg.K_KP6:
-                    current_tetro.rotate_clockwise() #rotate tetromino clockwise
+                    current_tetro.try_rotate_clockwise() #rotate tetromino clockwise
                     change_happened = True
 
     if harddropped:
@@ -292,7 +321,7 @@ while running:
         current_tetro = None
         current_tetro = Tetromino(GB.units)
 
-    if current_tetro.check_floor_collision():
+    if current_tetro.is_floor_collision():
         if fix_timer >= 1:
             current_tetro.fix_to_board()
             GB.check_full_row()
@@ -304,7 +333,7 @@ while running:
         drop_timer = 0.0
     else:
         fix_timer = 0.0
-        
+
  
     if change_happened:
         change_happened = False
