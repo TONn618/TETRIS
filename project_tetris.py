@@ -144,7 +144,7 @@ class Tetromino:
 
     def try_rotate_clockwise(self):
         dummy = copy.deepcopy(self)
-        if self.tetro_type == 'O':
+        if dummy.tetro_type == 'O':
             return
         dummy.rotated += 1
         index = dummy.rotated % dummy.rotation_cycle
