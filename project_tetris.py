@@ -35,28 +35,25 @@ class Tetromino:
         np.array([ [-1, 0], [0, 0], [1, 0], [1, -1] ]),
         np.array([ [-1, 0], [0, 0], [1, 0], [2, 0] ]),
         np.array([ [0, 0], [0, 1], [1, 0], [1, 1] ]),
-        np.array([ [-1, 0], [0, -1], [0, 1], [0, 0] ]) ]
+        np.array([ [-1, 0], [0, -1], [0, 0], [0, 1] ])]
+
     
     ROTATION_SHAPES = []
     ROTATION_MATRIX = [
-        np.array([ [0, -1], [1, 0] ]), # I
         np.array([ [1, 0], [0, 1] ]),   # O
-        np.array([ [0, 1], [-1, 0] ]) ] # L, J, S, Z, T
+        np.array([ [0, 1], [-1, 0] ]) ] # L, J, S, Z, T,
 
 
     def __init__(self, units):
         self.tetro_type = self.choose_type()
-        self.offsets = self.moving_offsets = Tetromino.MOVING_SHAPES[self.tetro_type]
-        self.rotation_offsets              = Tetromino.ROTATION_SHAPES[self.tetro_type]
+        self.rotation_offsets = Tetromino.ROTATION_SHAPES[self.tetro_type]
+        self.offsets = self.rotation_offsets[0]
 
         if self.tetro_type == 'O':
-            self.rotation_cycle = 2
-            self.anchor_point = np.array([0, 4])    #테트로미노 형성 지점의 units 인덱스, 
+            self.rotation_cycle = 1
+            self.anchor_point = np.array([0, 4])
         else:
-            if self.tetro_type == 'I':
-                self.rotation_cycle = 2
-            else : self.rotation_cycle = 4
-
+            self.rotation_cycle = 4
             self.anchor_point = np.array([1, 4])
         
         self.units = units
@@ -65,7 +62,7 @@ class Tetromino:
         for y, x in self.offsets + self.anchor_point:
             self.units[y][x].display_type = self.tetro_type
 
-        self.present_absolute_coords = self.offsets + self.anchor_point
+        self.current_coords = self.offsets + self.anchor_point
         #위 속성은, 테트로미노의 현재 절대 좌표 array(units 의 인덱스 4개)이며,
         #변경 방식은 다음과 같다:
         #테트로미노 형성 => offsets + anchor_point 으로 초기화 =>어느 방향으로든
@@ -78,15 +75,11 @@ class Tetromino:
         cls.MOVING_SHAPES     = dict(zip(cls.TETRO_TYPES, cls.MOVING_SHAPES))
         for tetro_type in cls.TETRO_TYPES:
             shape = cls.MOVING_SHAPES[tetro_type]
-            if tetro_type == 'I':
-                cls.ROTATION_SHAPES.append([shape] + [multiply_rows_by_matrix(shape, cls.ROTATION_MATRIX[0])])
-            
-            elif tetro_type == 'O':
+            if tetro_type == 'O':
                 cls.ROTATION_SHAPES.append([shape])
-            
             else:
                 cls.ROTATION_SHAPES.append([shape] + [
-                    multiply_rows_by_matrix(shape, np.linalg.matrix_power(cls.ROTATION_MATRIX[2], i)) for i in range(1, 4)] )
+                    multiply_rows_by_matrix(shape, np.linalg.matrix_power(cls.ROTATION_MATRIX[1], i)) for i in range(1, 4)] )
         
         cls.ROTATION_SHAPES = dict(zip(cls.TETRO_TYPES, cls.ROTATION_SHAPES))
 
@@ -97,75 +90,59 @@ class Tetromino:
         return chosen_type[0]
 
 
-    def drag_down_tetro(self):
+    def move_down(self):
         self.anchor_point += [1, 0]
-        print(1)
         #테트로미노를 아래로 한 칸 이동
 
 
-    def is_floor_collision(self):
-        for y, x in self.present_absolute_coords:
-            if  y >= 17:
-                return True
-            elif self.units[y+1][x].filled:
-                return True
-
-
-    def is_valid_unit(self, dy = 0, dx = 0):
-        for y, x in self.present_absolute_coords:
-            if x + dx < 0 or x + dx > 9:
-                return False
-            elif self.units[y + dy][x + dx].filled:
-                return False
-        return True
+    def is_collied(self, coords_list, dy=0, dx=0):
+        for y, x in coords_list:
+            if y + dy > 17:
+                return 3
+            elif x + dx < 0 or x + dx >= 10:
+                return 1
+            elif self.units[y + dy][x + dx].filled:         #주어진 좌표와 이동 오프셋에 대해 충돌 검사; 충돌할 때 True를 뱉는다    
+                print('collied2')
+                return 2
+        return False
     
 
-    def can_side_move(self, dx):
-        return self.is_valid_unit(dx)
-
+    def can_rotation(self):                             # 회전 가능 시 True 반환
+        next_rotated = (self.rotated + 1) % self.rotation_cycle
+        next_coords = [offset + self.anchor_point for offset in self.rotation_offsets[next_rotated]]
+        return not self.is_collied(next_coords)
     
-    def can_rotation(self):
-        return self.is_valid_unit()
-
-
-    def fix_to_board(self):
-        for y, x in self.present_absolute_coords:
+    def lock(self):
+        for y, x in self.current_coords:
             self.units[y][x].filled = True
         
 
-    def update_display_state(self):
-        for y, x in self.present_absolute_coords:
+    def update_display(self):
+        for y, x in self.current_coords:
             self.units[y][x].display_type = 'B' 
 
-        self.present_absolute_coords = self.offsets + self.anchor_point
-        for y, x in self.present_absolute_coords:
+        self.current_coords = self.offsets + self.anchor_point
+        for y, x in self.current_coords:
             self.units[y][x].display_type = self.tetro_type
 
 
-    def try_rotate_clockwise(self):
-        dummy = copy.deepcopy(self)
-        if dummy.tetro_type == 'O':
+    def rotate_clockwise(self):
+        if self.tetro_type == 'O':
             return
-        dummy.rotated += 1
-        index = dummy.rotated % dummy.rotation_cycle
-        if index == 0:
-            dummy.offsets = dummy.moving_offsets
-            dummy.rotated = 0
-        else: dummy.offsets = dummy.rotation_offsets[index]
-        dummy.present_absolute_coords = dummy.offsets + dummy.anchor_point
+        if self.can_rotation():
+            self.rotated = (self.rotated + 1) % self.rotation_cycle
+            self.offsets = self.rotation_offsets[self.rotated]
 
-        if not dummy.can_rotation():
-            dummy.try_SRS_KICK()
-        
         else:
-            self.rotated = dummy.rotated
-            self.offsets = dummy.offsets
-            self.present_absolute_coords = dummy.present_absolute_coords
+            print('srs kick applied')  # rotated랑 offsets 는 회전 이전 상태값임
+            self.apply_srs_kick()
 
 
-    def try_SRS_KICK(self, GameBoard):
+
+    def apply_srs_kick(self, GameBoard):
         for dy, dx in GameBoard.SRS_KICK_DATA:
-            if self.is_valid_unit(dy, dx):
+            pass
+            
 
 
 
@@ -173,7 +150,7 @@ class Tetromino:
 
 class GameBoard:
     PIXEL_POSITIONS = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
-    SRS_KICK_DATA = np.array([[0, 1], [0, -1], [1, 0], [1, 1], [1, -1]])
+    SRS_KICK_DATA = {}
     
     
     def __init__(self):
@@ -272,7 +249,7 @@ while running:
     dt = clock.tick(60) / 1000
     drop_timer += dt
     if drop_interval - drop_timer <= 0:
-        current_tetro.drag_down_tetro()
+        current_tetro.move_down()
         change_happened = True
         drop_timer = 0.0
 
@@ -286,44 +263,44 @@ while running:
 
         elif event.type == pyg.KEYDOWN:
                 if event.key == pyg.K_a:         #left movement
-                    if current_tetro.can_side_move(-1):
+                    if current_tetro.is_collied(current_tetro.current_coords, 0, -1) not in [1, 2]:
                         current_tetro.anchor_point -= [0, 1]
                         change_happened = True
 
                 elif event.key == pyg.K_s:         #down movement
-                    if current_tetro.is_floor_collision():
-                        pass
-                    else:
-                        current_tetro.anchor_point += [1, 0]
+                    if current_tetro.is_collied(current_tetro.current_coords, 1, 0) <= 1:
+                        current_tetro.move_down()
                         change_happened = True
                         drop_timer = 0.0
+                    else:
+                        pass
 
                 elif event.key == pyg.K_d:         #right movement
-                    if current_tetro.can_side_move(1):
+                    if current_tetro.is_collied(current_tetro.current_coords, 0, 1) not in [1, 2]:
                         current_tetro.anchor_point += [0, 1]
                         change_happened = True
 
                 elif event.key == pyg.K_KP5: #promptly drop tetromino
-                    while not current_tetro.is_floor_collision():
-                        current_tetro.drag_down_tetro()
-                        current_tetro.update_display_state()
+                    while current_tetro.is_collied(current_tetro.current_coords, 1, 0) <= 1:
+                        current_tetro.move_down()
+                        current_tetro.update_display()
                     harddropped = True
                     drop_timer = 0.0
 
                 elif event.key == pyg.K_KP6:
-                    current_tetro.try_rotate_clockwise() #rotate tetromino clockwise
+                    current_tetro.rotate_clockwise() #rotate tetromino clockwise
                     change_happened = True
 
     if harddropped:
-        current_tetro.fix_to_board()
+        current_tetro.lock()
         GB.check_full_row()
         harddropped = False
         current_tetro = None
         current_tetro = Tetromino(GB.units)
 
-    if current_tetro.is_floor_collision():
+    if current_tetro.is_collied(current_tetro.current_coords, 1, 0) >= 2:
         if fix_timer >= 1:
-            current_tetro.fix_to_board()
+            current_tetro.lock()
             GB.check_full_row()
             current_tetro = None
             current_tetro = Tetromino(GB.units)
@@ -337,7 +314,9 @@ while running:
  
     if change_happened:
         change_happened = False
-        current_tetro.update_display_state()
+        print(current_tetro.offsets)
+        print(current_tetro.anchor_point)
+        current_tetro.update_display()
 
     ScreenManager.reset_screen(current_tetro.units)
     pyg.display.flip()
