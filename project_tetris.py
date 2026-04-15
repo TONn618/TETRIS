@@ -1,8 +1,10 @@
+
 import numpy as np
 import sys
 import random as rd
 import select
 import time as t
+import pygame as pyg
 
 class Tetromino:
     TETRO_TYPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
@@ -62,7 +64,7 @@ class Tetromino:
 
     def update_display_first(self):
         for y, x in self.current_coords:
-            self.units[y][x].display_type = 'T'
+            self.units[y][x].display_type = self.tetro_type
 
 
     def move_down(self):
@@ -79,13 +81,13 @@ class Tetromino:
             self.units[int(y)][int(x)].display_type = 'B'
         self.current_coords = self.offset + self.anchor_point
         for y, x in self.current_coords:
-            self.units[int(y)][int(x)].display_type = 'T'
+            self.units[int(y)][int(x)].display_type = self.tetro_type
 
 
     def is_collied(self, coords_list, dy=0, dx=0):
         for y, x in coords_list:
             ny, nx = int(y + dy), int(x + dx)
-            if ny < 0 or ny > 16: return 3 # 바닥/천장 충돌
+            if ny < 0 or ny > 17: return 3 # 바닥/천장 충돌
             if nx < 0 or nx > 9: return 1  # 벽 충돌
             if self.units[ny][nx].filled: return 2 # 블록 충돌
         return False
@@ -114,6 +116,9 @@ class Tetromino:
 
 
 class GameBoard:
+    PIXEL_POSITIONS = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
+
+
     def __init__(self):
         self.score = 0
         self.level = 1
@@ -121,7 +126,13 @@ class GameBoard:
 
 
     def generate_map(self):
-        self.units = [[BlockUnit() for _ in range(10)] for _ in range(17)]
+        row_units = []
+        for position in GameBoard.PIXEL_POSITIONS:
+            row_units.append(BlockUnit(position))
+
+            if len(row_units) == 10:
+                self.units.append(row_units)
+                row_units = []
 
 
     def check_full_row(self):
@@ -150,34 +161,32 @@ class GameBoard:
 
 
 class BlockUnit:
-    def __init__(self):
+    TYPE_IMAGES = { tetro_type : pyg.transform.scale( pyg.image.load(f'Block_images/{tetro_type}.png') , (30, 30))
+                    for tetro_type in Tetromino.TETRO_TYPES}
+    TYPE_IMAGES['B'] = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30)) #B means a black background tile
+##    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
+
+
+    def __init__(self, pixel_position):
+        self.pixel_position = pixel_position
         self.display_type = 'B'
         self.filled = False
 
 
 
 
+
 class ScreenManager:
-    DISPLAY_CHARS = {'T': '■', 'B': '□'}
+    screen = pyg.display.set_mode((300, 540))# 기본화면, 필요시 참조하여 변경
 
 
     @classmethod
-    def reset_screen(cls, units, score, level):
-        print("\033[2J\033[H", end='', flush=True)
-        print("═" * 22)
+    def reset_screen(cls, units):
+        cls.screen.fill((0, 0, 0))
         for row in units:
-            print("║", end='')
-            print(" ".join(cls.DISPLAY_CHARS.get(u.display_type, '□') for u in row), end='')
-            print("║")
-        print("═" * 22)
-        print(f"Score: {score} | Level: {level}")
-        print("A:Left S:Down D:Right Q:CCW E:CW Space:HardDrop X:Quit")
-
-
-def get_input_async():
-    if select.select([sys.stdin], [], [], 0)[0]:
-        return sys.stdin.read(1).lower()
-    return None
+            for unit in row:
+                cls.screen.blit(BlockUnit.TYPE_IMAGES[unit.display_type], unit.pixel_position)
+        pyg.display.flip()
 
 
 
@@ -193,8 +202,7 @@ fix_timer = 0.0
 drop_interval = 0.8
 running = True
 
-try:
-    while running:
+while running:
         t.sleep(0.05)
         drop_timer += 0.05
         
@@ -205,43 +213,51 @@ try:
                 change_happened = True
             drop_timer = 0.0
 
-        key = get_input_async()
-        if key:
-            if key == 'a':
-                if not current_tetro.is_collied(current_tetro.current_coords, 0, -1):
-                    current_tetro.anchor_point -= [0, 1]
-                    change_happened = True
 
-            elif key == 'd':
-                if not current_tetro.is_collied(current_tetro.current_coords, 0, 1):
-                    current_tetro.anchor_point += [0, 1]
-                    change_happened = True
-
-            elif key == 's':
-                if not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
-                    current_tetro.move_down()
-                    change_happened = True
-                    drop_timer = 0.0
-
-            elif key == 'e':
-                if current_tetro.rotate_tetro(1): change_happened = True
-
-            elif key == 'q':
-                if current_tetro.rotate_tetro(-1): change_happened = True
-
-            elif key == ' ':
-                while not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
-                    current_tetro.move_down()
-                    current_tetro.update_display()
-                harddropped = True
-
-            elif key == 'x':
+        
+        for event in pyg.event.get():
+            if event.type == pyg.QUIT:
                 running = False
+                pyg.quit()
+                sys.exit()
+            if event.type == pyg.KEYDOWN:
+                key = event.key
+                
+                if key == pyg.K_a:
+                    if not current_tetro.is_collied(current_tetro.current_coords, 0, -1):
+                        current_tetro.anchor_point -= [0, 1]
+                        change_happened = True
+
+                elif key == pyg.K_d:
+                    if not current_tetro.is_collied(current_tetro.current_coords, 0, 1):
+                        current_tetro.anchor_point += [0, 1]
+                        change_happened = True
+
+                elif key == pyg.K_s:
+                    if not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
+                        current_tetro.move_down()
+                        change_happened = True
+                        drop_timer = 0.0
+
+                elif key == pyg.K_e:
+                    if current_tetro.rotate_tetro(1): change_happened = True
+
+                elif key == pyg.K_q:
+                    if current_tetro.rotate_tetro(-1): change_happened = True
+
+                elif key == pyg.K_SPACE:
+                    while not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
+                        current_tetro.move_down()
+                        current_tetro.update_display()
+                    harddropped = True
+
+                elif key == pyg.K_x:
+                    running = False
 
 
         if change_happened: 
             current_tetro.update_display()
-            ScreenManager.reset_screen(GB.units, GB.score, GB.level)
+            ScreenManager.reset_screen(GB.units)
             change_happened = False
 
 
@@ -258,7 +274,3 @@ try:
                 change_happened = True
         else:
             fix_timer = 0.0
-
-except KeyboardInterrupt:
-    print("\nQuit")
-    sys.exit(0)
