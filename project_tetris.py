@@ -1,4 +1,3 @@
-
 import numpy as np
 import sys
 import random as rd
@@ -12,13 +11,13 @@ class Tetromino:
 
     # 각 미노별 4가지 회전 상태 정의 (y, x)
     ROTATION_SHAPES = {
-        'S': [np.array([[0, -1], [0, 0], [0, 1], [0, 2]]), np.array([[-1, 0], [0, 0], [1, 0], [2, 0]]), np.array([[0, -2], [0, -1], [0, 0], [0, 1]]), np.array([[-2, 0], [-1, 0], [0, 0], [1, 0]])],
-        'Z': [np.array([[-1, -1], [0, -1], [0, 0], [0, 1]]), np.array([[-1, 1], [-1, 0], [0, 0], [1, 0]]), np.array([[0, -1], [0, 0], [0, 1], [1, 1]]), np.array([[-1, 0], [0, 0], [1, 0], [1, -1]])],
+        'S': [np.array([[0, -1], [0, 0], [-1, 0], [-1, 1]]), np.array([[-1, 0], [0, 0], [0, 1], [1, 1]]), np.array([[1, -1], [1, 0], [0, 0], [0, 1]]), np.array([[-1, -1], [0, -1], [0, 0], [1, 0]])],
+        'Z': [np.array([[-1, -1], [-1, 0], [0, 0], [0, 1]]), np.array([[-1, 1], [0, 1], [0, 0], [1, 0]]), np.array([[0, -1], [0, 0], [1, 0], [1, 1]]), np.array([[-1, 0], [0, 0], [0, -1], [1, -1]])],
         'L': [np.array([[0, -1], [0, 0], [0, 1], [-1, 1]]), np.array([[-1, 0], [0, 0], [1, 0], [1, 1]]), np.array([[1, -1], [0, -1], [0, 0], [0, 1]]), np.array([[-1, -1], [-1, 0], [0, 0], [1, 0]])],
         'O': [np.array([[-1, -1], [-1, 0], [0, -1], [0, 0]])],
         'I': [np.array([[0, -1], [0, 0], [0, 1], [0, 2]]), np.array([[-1, 0], [0, 0], [1, 0], [2, 0]]), np.array([[0, -2], [0, -1], [0, 0], [0, 1]]), np.array([[-2, 0], [-1, 0], [0, 0], [1, 0]])],
         'J': [np.array([[0, -1], [0, 0], [0, 1], [-1, -1]]), np.array([[-1, 0], [0, 0], [1, 0], [-1, 1]]), np.array([[0, -1], [0, 0], [0, 1], [1, 1]]), np.array([[-1, 0], [0, 0], [1, 0], [1, -1]])],
-        'T': [np.array([[-1, -1], [-1, 0], [0, 0], [0, 1]]), np.array([[-1, 1], [0, 1], [0, 0], [1, 0]]), np.array([[0, -1], [0, 0], [1, 0], [1, 1]]), np.array([[-1, 0], [0, 0], [0, -1], [1, -1]])]
+        'T': [np.array([[0, -1], [0, 0], [0, 1], [-1, 0]]), np.array([[-1, 0], [0, 0], [0, 1], [1, 0]]), np.array([[0, -1], [0, 0], [0, 1], [1, 0]]), np.array([[-1, 0], [0, 0], [0, -1], [1, 0]])]
     }
 
     # J, L, S, T, Z용 Kick Data (표 기반 변환: +Y -> -dy)
@@ -45,13 +44,15 @@ class Tetromino:
         (0, 3): np.array([[0, 0], [0, -1], [0, 2], [-2, -1], [1, 2]])
     }
 
-    def __init__(self, units):
-        self.tetro_type = self.choose_type()
+    def __init__(self, units, anchor_point, tetro_type=None):
+        if tetro_type is None:
+            self.tetro_type = Tetromino.choose_type()
+        self.tetro_type = tetro_type
         self.rotation_offsets = Tetromino.ROTATION_SHAPES[self.tetro_type]  # <This is a constant set of offsets that is determined by tetro_type> !
         self.rotation_cycle = len(self.rotation_offsets)
         self.rotated = 0
         self.offset = self.rotation_offsets[self.rotated] # <This is a variable of a offset that changes when moving, rotating> !
-        self.anchor_point = np.array([1, 4])
+        self.anchor_point = anchor_point
         self.units = units
         self.current_coords = self.offset + self.anchor_point
         self.update_display_first()
@@ -60,6 +61,11 @@ class Tetromino:
     @classmethod
     def choose_type(cls):
         return rd.choices(cls.TETRO_TYPES, cls.WEIGHTS, k=1)[0]
+
+
+    def clear_display(self):
+        for y, x in self.current_coords:
+            self.units[int(y)][int(x)].display_type = 'B'
 
 
     def update_display_first(self):
@@ -116,27 +122,34 @@ class Tetromino:
 
 
 class GameBoard:
-    PIXEL_POSITIONS = [(x, y) for y in range(0, 30 * 18, 30) for x in range(0, 30 * 10, 30)] #coords to blit Block image
+#   PIXEL_COORDS = [(X, Y) FOR Y in range(18) for X in range(10)]
+#   기존에 Blockunit 마다 좌표를 속성값으로 가지게 했지만, 이중 리스트인 units 의 인덱스 값으로 대체하기로 결정.
+#   이때 unit는 Blockunit 10개를 한 묶음으로 하는 리스트를 원소로 가지는 구조상, 좌표값이 x, y가 아닌 y, x 가 되게된다. <유의바람>
 
 
     def __init__(self):
         self.score = 0
         self.level = 1
         self.units = []
+        self.next_tetro_queue = [Tetromino.choose_type() for _ in range(10)]    #10개 미리 뽑아 놓기
+        self.hold_type = None
+        self.next_type = self.next_tetro_queue.pop(0)
 
 
     def generate_map(self):
         row_units = []
-        for position in GameBoard.PIXEL_POSITIONS:
-            row_units.append(BlockUnit(position))
+        for _ in range(18):
+            for _ in range(10):
+                row_units.append(BlockUnit())
+            self.units.append(row_units)
+            row_units = []
 
-            if len(row_units) == 10:
-                self.units.append(row_units)
-                row_units = []
+
+        
 
 
     def check_full_row(self):
-        rows_to_clear = [i for i, row in enumerate(self.units) if all(u.filled for u in row)]
+        rows_to_clear = [i for i, row in enumerate(self.units) if all(u.filled for u in row)][::-1]  # Clear from bottom to top
         for i in rows_to_clear:
             self.clear_row(i)
             self.drag_down_grid(i)
@@ -154,7 +167,51 @@ class GameBoard:
         self.units.insert(0, [BlockUnit() for _ in range(10)])
     
 
-    # def save_tetro(self, )
+    def spawn_tetro(self, tetro_type=None, anchor_point=None):
+        if anchor_point is None:
+            anchor_point = np.array([1, 4])
+
+        if tetro_type is None:
+            tetro_type = self.next_type
+            self.next_type = self.next_tetro_queue.pop(0)
+            self.next_tetro_queue.append(Tetromino.choose_type())
+        return Tetromino(self.units, anchor_point, tetro_type)
+    
+
+# 위 함수의 anchor_point, tetro_type 디폴트 인자를 왜 저렇게 해놨나 싶다면 필독
+# 파이썬은 함수의 정의 시점에 정의된 디폴트 인자의 메모리 주소가 정의 후에도 삭제되지 않는다 사용한다.
+# 이때 불변 객체, 가변 객체라는 것이 있는데 불변은 상수, 문자열 같은 값이고 가변 인자는 리스트, 딕셔너리 등 대부분의 값이다
+# 불변 객체는 값 변동시 메모리 주소도 변경이 되지만,
+# 가변 객체는 값 변동시 메모리 주소가 변하지 않는다
+# 이때 가변 객체인 어레이를 디폴트 인자로 넣어버리면, 함수 내부에서 값이 변경된 후
+# 다음번 함수 호출 시에도 그 변경된 값이 디폴트 인자로 들어가게 된다
+# 즉 함수는 매번 리콜이 되지만, 변경된 디폴트 인자의 값은 매번 유지되는 ㅈㄴ 어이없는 일이 생긴다
+# 따라서 가변 인자는 ㅅㅂ 절대 디폴트에 넣지 말고 함수 내부에 따로 빼서 변경하는 위의 형식이 효과적이며 실제 관용형식이라고 한다.
+
+
+
+
+    def swap_tetro(self, old_type):   # 반환값은 새로 갱신될 테트로 객체의 테트로 타입
+        if self.hold_type is None:
+            self.hold_type = old_type
+            now_type = self.next_type
+            self.next_type = self.next_tetro_queue.pop(0)
+            self.next_tetro_queue.append(Tetromino.choose_type())
+        else:
+            now_type = self.hold_type  # 예전 hold 타입 먼저 저장
+            self.hold_type = old_type  # 현재 테트로를 hold에 저장
+        return now_type
+#변수명 설명
+# hold_type: 해당 함수가 종료되고 hold 칸에 있을 타입
+# next_type: 해당 함수가 종료되고 게임판에 next_tetro 로 띄워질 타입
+# old_type: 해당 함수의 인풋값으로 들어온, 즉 삭제될 테트로 타입
+# now_type: 해당 함수가 반환할, 즉 갱신되어 생성될 테트로 타입
+
+# 구조 설명
+# 여기선 next, hold, now_type 데이터 조작만 해놓는다
+# 화면 상단에 띄워지는 건 screen class 에서 조작한다.
+# 이 함수의 반환값으로 current_tetro 객체를 새 Tetromino 객체로 업데이트한다
+# 이 때 anchor_point 값은 구 테트로의 데이터를 계승하며, 테트로 모양이 달라 벽과 충돌 가능성이 있으므로 생성 직후 SRS Test 를 실행해야 한다.
 
 
 
@@ -164,11 +221,10 @@ class BlockUnit:
     TYPE_IMAGES = { tetro_type : pyg.transform.scale( pyg.image.load(f'Block_images/{tetro_type}.png') , (30, 30))
                     for tetro_type in Tetromino.TETRO_TYPES}
     TYPE_IMAGES['B'] = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30)) #B means a black background tile
-##    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
+#    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
 
 
-    def __init__(self, pixel_position):
-        self.pixel_position = pixel_position
+    def __init__(self):
         self.display_type = 'B'
         self.filled = False
 
@@ -177,15 +233,37 @@ class BlockUnit:
 
 
 class ScreenManager:
-    screen = pyg.display.set_mode((300, 540))# 기본화면, 필요시 참조하여 변경
+    screen = pyg.display.set_mode((480, 540))# 기본화면, 필요시 참조하여 변경
 
 
     @classmethod
-    def reset_screen(cls, units):
+    def reset_screen(cls):                  #화면을 검게 칠해서 깔끔하게  reset하는 함수
         cls.screen.fill((0, 0, 0))
-        for row in units:
-            for unit in row:
-                cls.screen.blit(BlockUnit.TYPE_IMAGES[unit.display_type], unit.pixel_position)
+
+
+    @classmethod
+    def draw_board(cls, units):             #Tetro가 떨어지는 board를 drawing 함수
+        for y, row in enumerate(units):
+            for x, unit in enumerate(row):
+                cls.screen.blit(BlockUnit.TYPE_IMAGES[unit.display_type], (x * 30 + 180, y * 30))
+
+
+    @classmethod
+    def draw_hold_panel(cls, hold_type):       #Hold 된 테트로를 보여주는 함수
+            for y in range(0, 120, 30):
+                for x in range(0, 120, 30):
+                    cls.screen.blit(BlockUnit.TYPE_IMAGES['B'], (x, y))
+
+            if hold_type is not None:
+                for y, x in Tetromino.ROTATION_SHAPES[hold_type][0]:
+                    cls.screen.blit(BlockUnit.TYPE_IMAGES[hold_type], ((x+1) * 30, (y+1) * 30))
+
+
+    @classmethod
+    def render_all(cls, units, hold_type):
+        cls.reset_screen()
+        cls.draw_board(units)
+        cls.draw_hold_panel(hold_type)
         pyg.display.flip()
 
 
@@ -194,7 +272,7 @@ class ScreenManager:
 # --- Main Game Loop ---
 GB = GameBoard()
 GB.generate_map()
-current_tetro = Tetromino(GB.units)
+current_tetro = GB.spawn_tetro()
 change_happened = True
 harddropped = False
 drop_timer = 0.0
@@ -223,41 +301,48 @@ while running:
             if event.type == pyg.KEYDOWN:
                 key = event.key
                 
-                if key == pyg.K_a:
+                if key == pyg.K_a:      #KeyLeft
                     if not current_tetro.is_collied(current_tetro.current_coords, 0, -1):
                         current_tetro.anchor_point -= [0, 1]
                         change_happened = True
 
-                elif key == pyg.K_d:
+                elif key == pyg.K_d:    #KeyRight
                     if not current_tetro.is_collied(current_tetro.current_coords, 0, 1):
                         current_tetro.anchor_point += [0, 1]
                         change_happened = True
 
-                elif key == pyg.K_s:
+                elif key == pyg.K_s:    #KeyDown
                     if not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
                         current_tetro.move_down()
                         change_happened = True
                         drop_timer = 0.0
 
-                elif key == pyg.K_e:
+                elif key == pyg.K_e:    #Key RotateRight
                     if current_tetro.rotate_tetro(1): change_happened = True
 
-                elif key == pyg.K_q:
+                elif key == pyg.K_q:    #Key RotateLeft
                     if current_tetro.rotate_tetro(-1): change_happened = True
 
-                elif key == pyg.K_SPACE:
+                elif key == pyg.K_SPACE:    #Key HardDrop
                     while not current_tetro.is_collied(current_tetro.current_coords, 1, 0):
                         current_tetro.move_down()
                         current_tetro.update_display()
                     harddropped = True
 
-                elif key == pyg.K_x:
+                elif key == pyg.K_w:    #Key Hold
+                    current_tetro.clear_display()
+                    new_type = GB.swap_tetro(current_tetro.tetro_type)
+                    current_tetro = GB.spawn_tetro(new_type, current_tetro.anchor_point)
+                    current_tetro.update_display()
+                    change_happened = True
+
+                elif key == pyg.K_x:    #Key Exit
                     running = False
 
 
         if change_happened: 
             current_tetro.update_display()
-            ScreenManager.reset_screen(GB.units)
+            ScreenManager.render_all(GB.units, GB.hold_type)
             change_happened = False
 
 
@@ -268,7 +353,7 @@ while running:
             if fix_timer >= 0.5 or harddropped:
                 current_tetro.lock()
                 GB.check_full_row()
-                current_tetro = Tetromino(GB.units)
+                current_tetro = GB.spawn_tetro()
                 fix_timer = 0.0
                 harddropped = False
                 change_happened = True
