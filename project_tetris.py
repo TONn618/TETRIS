@@ -1,7 +1,6 @@
 import numpy as np
 import sys
 import random as rd
-import select
 import time as t
 import pygame as pyg
 
@@ -93,9 +92,10 @@ class Tetromino:
     def is_collied(self, coords_list, dy=0, dx=0):
         for y, x in coords_list:
             ny, nx = int(y + dy), int(x + dx)
-            if ny < 0 or ny > 17: return 3 # 바닥/천장 충돌
-            if nx < 0 or nx > 9: return 1  # 벽 충돌
-            if self.units[ny][nx].filled: return 2 # 블록 충돌
+            if ny < 0: return 1             # 바닥 충돌
+            if ny > 17: return 2            # 천장 충돌
+            if nx < 0 or nx > 9: return 3   # 세로벽 충돌
+            if self.units[ny][nx].filled: return 4 # 블록 충돌
         return False
 
 
@@ -129,11 +129,32 @@ class GameBoard:
 
     def __init__(self):
         self.score = 0
+        self.highscore = 0
         self.level = 1
         self.units = []
         self.next_tetro_queue = [Tetromino.choose_type() for _ in range(10)]    #10개 미리 뽑아 놓기
         self.hold_type = None
         self.next_type = self.next_tetro_queue.pop(0)
+
+
+    def load_high_score(self):
+        #scores.txt 파일에서 최고 점수 하나를 읽어옴
+        with open("scores.txt", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            if not lines:
+                self.highscore = 0
+                return
+            # 파일에 저장된 점수들 중 가장 큰 값을 반환 (숫자로 변환)
+            scores = [int(line.strip()) for line in lines if line.strip().isdigit()]
+            self.highscore = max(scores) if scores else 0
+            return
+
+
+    def save_score(self):
+        #게임 종료 시 현재 점수를 파일에 기록하고 최고 점수 갱신
+        # 1. 파일 끝에 현재 점수 추가 (a 모드)
+        with open("scores.txt", "a", encoding="utf-8") as f:
+            f.write(f"{self.score}\n")
 
 
     def generate_map(self):
@@ -143,9 +164,6 @@ class GameBoard:
                 row_units.append(BlockUnit())
             self.units.append(row_units)
             row_units = []
-
-
-        
 
 
     def check_full_row(self):
@@ -185,7 +203,7 @@ class GameBoard:
 # 가변 객체는 값 변동시 메모리 주소가 변하지 않는다
 # 이때 가변 객체인 어레이를 디폴트 인자로 넣어버리면, 함수 내부에서 값이 변경된 후
 # 다음번 함수 호출 시에도 그 변경된 값이 디폴트 인자로 들어가게 된다
-# 즉 함수는 매번 리콜이 되지만, 변경된 디폴트 인자의 값은 매번 유지되는 ㅈㄴ 어이없는 일이 생긴다
+# 즉 함수는 매번 리콜이 되지만, 함수 사용시 인풋값을 직접 넣어주지 않으면 변경된 디폴트 인자의 값은 매번 유지되는 ㅈㄴ 어이없는 일이 생긴다
 # 따라서 가변 인자는 ㅅㅂ 절대 디폴트에 넣지 말고 함수 내부에 따로 빼서 변경하는 위의 형식이 효과적이며 실제 관용형식이라고 한다.
 
 
@@ -212,6 +230,13 @@ class GameBoard:
 # 화면 상단에 띄워지는 건 screen class 에서 조작한다.
 # 이 함수의 반환값으로 current_tetro 객체를 새 Tetromino 객체로 업데이트한다
 # 이 때 anchor_point 값은 구 테트로의 데이터를 계승하며, 테트로 모양이 달라 벽과 충돌 가능성이 있으므로 생성 직후 SRS Test 를 실행해야 한다.
+
+
+    def is_gameover(self, current_tetro):
+        for y, x in current_tetro.current_coords:
+            if current_tetro.units[y+1][x].filled:
+                self.save_score()
+                return True
 
 
 
@@ -260,6 +285,31 @@ class ScreenManager:
 
 
     @classmethod
+    def show_gameover_screen(cls, game_board):
+        cls.reset_screen()
+
+        title_font = pyg.font.SysFont(None, 72)
+        stat_font = pyg.font.SysFont(None, 36)
+
+        title_surf = title_font.render('GAMEOVER', True, (255, 255, 255))
+        title_rect = title_surf.get_rect(center=(cls.screen.get_width() // 2, cls.screen.get_height() // 2 - 80))
+        cls.screen.blit(title_surf, title_rect)
+
+        stats = [
+            ('LEVEL', game_board.level),
+            ('SCORE', game_board.score),
+            ('HIGHSCORE', game_board.highscore),
+        ]
+
+        for i, (label, value) in enumerate(stats):
+            text = stat_font.render(f'{label}: {value}', True, (255, 255, 255))
+            rect = text.get_rect(center=(cls.screen.get_width() // 2, cls.screen.get_height() // 2 + 30 + i * 40))
+            cls.screen.blit(text, rect)
+
+        pyg.display.flip()
+
+
+    @classmethod
     def render_all(cls, units, hold_type):
         cls.reset_screen()
         cls.draw_board(units)
@@ -270,6 +320,7 @@ class ScreenManager:
 
 
 # --- Main Game Loop ---
+pyg.init()
 GB = GameBoard()
 GB.generate_map()
 current_tetro = GB.spawn_tetro()
@@ -333,6 +384,11 @@ while running:
                     current_tetro.clear_display()
                     new_type = GB.swap_tetro(current_tetro.tetro_type)
                     current_tetro = GB.spawn_tetro(new_type, current_tetro.anchor_point)
+                    if GB.is_gameover(current_tetro):       #spawn 직후 게임 오버인지 테스트
+                        current_tetro.update_display()
+                        ScreenManager.render_all(GB.units, GB.hold_type)
+                        ScreenManager.show_gameover_screen(GB)
+                        running = False
                     current_tetro.update_display()
                     change_happened = True
 
@@ -347,13 +403,17 @@ while running:
 
 
 
-        # 바닥에 닿았을 때 고정 로직
-        if current_tetro.is_collied(current_tetro.current_coords, 1, 0):
+        elif current_tetro.is_collied(current_tetro.current_coords, 1, 0):          #천장/바닥 테트로 등 충돌했을 경우
             fix_timer += 0.05
             if fix_timer >= 0.5 or harddropped:
                 current_tetro.lock()
                 GB.check_full_row()
                 current_tetro = GB.spawn_tetro()
+                if GB.is_gameover(current_tetro):       #spawn 직후 게임 오버인지 테스트
+                    current_tetro.update_display()
+                    ScreenManager.render_all(GB.units, GB.hold_type)
+                    ScreenManager.show_gameover_screen(GB)
+                    running = False
                 fix_timer = 0.0
                 harddropped = False
                 change_happened = True
