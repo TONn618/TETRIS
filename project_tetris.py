@@ -4,6 +4,9 @@ import random as rd
 import time as t
 import pygame as pyg
 
+'''import sys, subprocess
+subprocess.check_call([sys.executable, "-m", "pip", "install", "numpy", "pygame"])'''    #python shell 창에서 numpy, pygame 바로 다운받는 명령어
+
 class Tetromino:
     TETRO_TYPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
     WEIGHTS     = [0.1, 0.1, 0.15, 0.15, 0.15, 0.2, 0.15]
