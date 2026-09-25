@@ -4,9 +4,6 @@ import random as rd
 import time as t
 import pygame as pyg
 
-'''import sys, subprocess
-subprocess.check_call([sys.executable, "-m", "pip", "install", "numpy", "pygame"])'''    #python shell 창에서 numpy, pygame 바로 다운받는 명령어
-
 class Tetromino:
     TETRO_TYPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
     WEIGHTS     = [0.1, 0.1, 0.15, 0.15, 0.15, 0.2, 0.15]
@@ -48,7 +45,7 @@ class Tetromino:
 
     def __init__(self, units, anchor_point, tetro_type=None):
         if tetro_type is None:
-            self.tetro_type = Tetromino.choose_type()
+            self.tetro_type = GameBoard.get_next_type()
         self.tetro_type = tetro_type
         self.rotation_offsets = Tetromino.ROTATION_SHAPES[self.tetro_type]  # <This is a constant set of offsets that is determined by tetro_type> !
         self.rotation_cycle = len(self.rotation_offsets)
@@ -59,10 +56,6 @@ class Tetromino:
         self.current_coords = self.offset + self.anchor_point
         self.update_display_first()
 
-
-    @classmethod
-    def choose_type(cls):
-        return rd.choices(cls.TETRO_TYPES, cls.WEIGHTS, k=1)[0]
 
 
     def clear_display(self):
@@ -107,7 +100,7 @@ class Tetromino:
         
         next_rotated = (self.rotated + direction) % self.rotation_cycle
         next_offsets = self.rotation_offsets[next_rotated]
-         
+        
         kick_set = Tetromino.SRS_KICK_DATA_I if self.tetro_type == 'I' else Tetromino.SRS_KICK_DATA
         try_offsets = kick_set.get((self.rotated, next_rotated))
         
@@ -135,9 +128,9 @@ class GameBoard:
         self.highscore = 0
         self.level = 1
         self.units = []
-        self.next_tetro_queue = [Tetromino.choose_type() for _ in range(10)]    #10개 미리 뽑아 놓기
+        self.next_tetro_queue = []    #10개 미리 뽑아 놓기
         self.hold_type = None
-        self.next_type = self.next_tetro_queue.pop(0)
+        self.next_type = self.get_next_type()
 
 
     def load_high_score(self):
@@ -150,7 +143,16 @@ class GameBoard:
             # 파일에 저장된 점수들 중 가장 큰 값을 반환 (숫자로 변환)
             scores = [int(line.strip()) for line in lines if line.strip().isdigit()]
             self.highscore = max(scores) if scores else 0
+            print(self.highscore)
             return
+
+
+    def get_next_type(self):
+        if self.next_tetro_queue == []:
+            self.next_tetro_queue = rd.sample(Tetromino.TETRO_TYPES, 7)
+        print(self.next_tetro_queue)
+        return self.next_tetro_queue.pop(0)
+
 
 
     def save_score(self):
@@ -186,7 +188,16 @@ class GameBoard:
     def drag_down_grid(self, row_index):
         self.units.pop(row_index)
         self.units.insert(0, [BlockUnit() for _ in range(10)])
-    
+
+
+    def get_ghost_positions(self, current_tetro):           #고스트 블럭의 좌표를 계산하는 코드
+        max_dy = 0
+        while not current_tetro.is_collied(current_tetro.current_coords, max_dy+1, 0):
+            max_dy += 1
+        ghost_coords = [[y + dy, x] for y, x in current_tetro.current_coords for dy in range(1, max_dy+1)]
+        return ghost_coords
+
+
 
     def spawn_tetro(self, tetro_type=None, anchor_point=None):
         if anchor_point is None:
@@ -194,8 +205,7 @@ class GameBoard:
 
         if tetro_type is None:
             tetro_type = self.next_type
-            self.next_type = self.next_tetro_queue.pop(0)
-            self.next_tetro_queue.append(Tetromino.choose_type())
+            self.next_type = self.get_next_type()
         return Tetromino(self.units, anchor_point, tetro_type)
     
 
@@ -216,8 +226,7 @@ class GameBoard:
         if self.hold_type is None:
             self.hold_type = old_type
             now_type = self.next_type
-            self.next_type = self.next_tetro_queue.pop(0)
-            self.next_tetro_queue.append(Tetromino.choose_type())
+            self.next_type = self.get_next_type()
         else:
             now_type = self.hold_type  # 예전 hold 타입 먼저 저장
             self.hold_type = old_type  # 현재 테트로를 hold에 저장
@@ -241,20 +250,6 @@ class GameBoard:
                 self.save_score()
                 return True
 
-
-
-
-
-class BlockUnit:
-    TYPE_IMAGES = { tetro_type : pyg.transform.scale( pyg.image.load(f'Block_images/{tetro_type}.png') , (30, 30))
-                    for tetro_type in Tetromino.TETRO_TYPES}
-    TYPE_IMAGES['B'] = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30)) #B means a black background tile
-#    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
-
-
-    def __init__(self):
-        self.display_type = 'B'
-        self.filled = False
 
 
 
@@ -288,6 +283,18 @@ class ScreenManager:
 
 
     @classmethod
+    def draw_ghost_block(cls, ghost_block_coords):
+        for y, x in ghost_block_coords:
+            cls.screen.blit(BlockUnit.TYPE_IMAGES['G'], (x * 30 + 180, y * 30))
+    
+
+    @classmethod
+    def draw_tetromino(cls, current_tetro):
+        for y, x in current_tetro.current_coords:
+            cls.screen.blit(BlockUnit.TYPE_IMAGES[current_tetro.tetro_type], (x * 30 + 180, y * 30))
+
+
+    @classmethod
     def show_gameover_screen(cls, game_board):
         cls.reset_screen()
 
@@ -313,11 +320,29 @@ class ScreenManager:
 
 
     @classmethod
-    def render_all(cls, units, hold_type):
+    def render_all(cls, units, hold_type, current_tetro, ghost_block_coords=None):
         cls.reset_screen()
         cls.draw_board(units)
+        if ghost_block_coords is not None:
+            cls.draw_ghost_block(ghost_block_coords)
+        cls.draw_tetromino(current_tetro)
         cls.draw_hold_panel(hold_type)
         pyg.display.flip()
+
+
+
+
+class BlockUnit:
+    TYPE_IMAGES = { tetro_type : pyg.transform.scale( pyg.image.load(f'Block_images/{tetro_type}.png') , (30, 30))
+                    for tetro_type in Tetromino.TETRO_TYPES}
+    TYPE_IMAGES['B'] = pyg.transform.scale( pyg.image.load('Block_images/black_background.png') , (30, 30)) #B means a black background tile
+#    white_background_image = pyg.transform.scale( pyg.image.load('Block_images/white_background.png') , (30, 30))
+    TYPE_IMAGES['G'] = pyg.transform.scale(pyg.image.load('Block_images/ghost_background1.png'), (30, 30))
+
+    def __init__(self):
+        self.display_type = 'B'
+        self.filled = False
+
 
 
 
@@ -326,6 +351,7 @@ class ScreenManager:
 pyg.init()
 GB = GameBoard()
 GB.generate_map()
+GB.load_high_score()
 current_tetro = GB.spawn_tetro()
 change_happened = True
 harddropped = False
@@ -387,9 +413,9 @@ while running:
                     current_tetro.clear_display()
                     new_type = GB.swap_tetro(current_tetro.tetro_type)
                     current_tetro = GB.spawn_tetro(new_type, current_tetro.anchor_point)
-                    if GB.is_gameover(current_tetro):       #spawn 직후 게임 오버인지 테스트
+                    if GB.is_gameover(current_tetro) and current_tetro.anchor_point[0] <= 1:       #spawn 직후 게임 오버인지 테스트
                         current_tetro.update_display()
-                        ScreenManager.render_all(GB.units, GB.hold_type)
+                        ScreenManager.render_all(GB.units, GB.hold_type, current_tetro)
                         ScreenManager.show_gameover_screen(GB)
                         running = False
                     current_tetro.update_display()
@@ -401,7 +427,8 @@ while running:
 
         if change_happened: 
             current_tetro.update_display()
-            ScreenManager.render_all(GB.units, GB.hold_type)
+            ghost_block_coords = GB.get_ghost_positions(current_tetro)
+            ScreenManager.render_all(GB.units, GB.hold_type, current_tetro, ghost_block_coords)
             change_happened = False
 
 
@@ -414,7 +441,7 @@ while running:
                 current_tetro = GB.spawn_tetro()
                 if GB.is_gameover(current_tetro):       #spawn 직후 게임 오버인지 테스트
                     current_tetro.update_display()
-                    ScreenManager.render_all(GB.units, GB.hold_type)
+                    ScreenManager.render_all(GB.units, GB.hold_type, current_tetro)
                     ScreenManager.show_gameover_screen(GB)
                     running = False
                 fix_timer = 0.0
